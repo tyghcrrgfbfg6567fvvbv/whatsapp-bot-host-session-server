@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>URL Ping Monitor - Keep Your Sites Awake</title>
-  <!-- Bootstrap CSS for professional styling -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
   <style>
     body { padding: 20px; background-color: #f8f9fa; }
@@ -18,20 +17,18 @@
   <div class="container">
     <header class="text-center mb-5">
       <h1 class="display-4">URL Ping Monitor</h1>
-      <p class="lead">Professional tool to ping multiple URLs (e.g., Render sites) in the background, keeping them awake. Add URLs, monitor status (up/down), and view logs. Pinging runs every 5 minutes when the page is hidden/minimized.</p>
+      <p class="lead">Professional tool to ping multiple URLs (e.g., Render sites) to keep them awake. Add URLs, monitor status, and view logs. Pinging runs every 5 minutes when hidden.</p>
     </header>
 
-    <!-- Add URL Form -->
     <section class="mb-4">
       <form id="addUrlForm">
         <div class="input-group">
-          <input type="url" class="form-control" id="urlInput" placeholder="Enter URL (e.g., https://your-site.onrender.com)" required>
+          <input type="url" class="form-control" id="urlInput" placeholder="Enter URL (e.g., https://whatsapp-bot-host-session.onrender.com)" required>
           <button class="btn btn-primary" type="submit">Add URL</button>
         </div>
       </form>
     </section>
 
-    <!-- URL List Table -->
     <section>
       <h2>Monitored URLs</h2>
       <table class="table table-striped table-hover" id="urlTable">
@@ -40,6 +37,7 @@
             <th>URL</th>
             <th>Status</th>
             <th>Last Ping</th>
+            <th>Response Time</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -47,7 +45,6 @@
       </table>
     </section>
 
-    <!-- Global Status and Logs -->
     <section class="mt-4">
       <h2>Global Status</h2>
       <p id="globalStatus">Status: Idle</p>
@@ -55,7 +52,6 @@
       <div id="logArea" class="log-area"></div>
     </section>
 
-    <!-- Settings -->
     <section class="mt-4">
       <h2>Settings</h2>
       <div class="form-group">
@@ -67,12 +63,11 @@
     </section>
   </div>
 
-  <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 
   <script>
     let urls = JSON.parse(localStorage.getItem('pingUrls')) || [];
-    let pingInterval = parseInt(localStorage.getItem('pingInterval')) || 5; // Default 5 minutes
+    let pingInterval = parseInt(localStorage.getItem('pingInterval')) || 5;
     let intervalId = null;
     const tableBody = document.querySelector('#urlTable tbody');
     const globalStatus = document.getElementById('globalStatus');
@@ -104,6 +99,7 @@
           <td>${item.url}</td>
           <td class="${item.status === 'Up' ? 'status-up' : item.status === 'Down' ? 'status-down' : 'status-pending'}">${item.status || 'Pending'}</td>
           <td>${item.lastPing ? new Date(item.lastPing).toLocaleString() : 'N/A'}</td>
+          <td>${item.responseTime ? item.responseTime + ' ms' : 'N/A'}</td>
           <td>
             <button class="btn btn-sm btn-warning edit-btn" data-index="${index}">Edit</button>
             <button class="btn btn-sm btn-danger remove-btn" data-index="${index}">Remove</button>
@@ -113,32 +109,33 @@
       });
     }
 
-    function pingAll() {
+    async function pingAll() {
       globalStatus.textContent = 'Status: Pinging...';
-      urls.forEach((item, index) => {
-        fetch(item.url, { mode: 'no-cors' })
-          .then(() => {
-            urls[index].status = 'Up';
-            urls[index].lastPing = Date.now();
-            logMessage(`Ping successful for ${item.url}`);
-          })
-          .catch(() => {
-            urls[index].status = 'Down';
-            urls[index].lastPing = Date.now();
-            logMessage(`Ping failed for ${item.url}`);
-          })
-          .finally(() => {
-            saveUrls();
-            renderTable();
-          });
-      });
+      for (let i = 0; i < urls.length; i++) {
+        const startTime = performance.now();
+        try {
+          const response = await fetch(urls[i].url, { mode: 'no-cors' });
+          // Since no-cors hides response status, we assume success if no error is thrown
+          urls[i].status = 'Up';
+          urls[i].lastPing = Date.now();
+          urls[i].responseTime = Math.round(performance.now() - startTime);
+          logMessage(`Ping successful for ${urls[i].url} (${urls[i].responseTime} ms)`);
+        } catch (error) {
+          urls[i].status = 'Down';
+          urls[i].lastPing = Date.now();
+          urls[i].responseTime = null;
+          logMessage(`Ping failed for ${urls[i].url}: ${error.message}`);
+        }
+      }
+      saveUrls();
+      renderTable();
       globalStatus.textContent = 'Status: Ping complete';
     }
 
     function startPinging() {
       if (intervalId) clearInterval(intervalId);
       intervalId = setInterval(pingAll, pingInterval * 60 * 1000);
-      pingAll(); // Initial ping
+      pingAll();
     }
 
     function stopPinging() {
@@ -146,7 +143,6 @@
       globalStatus.textContent = 'Status: Pinging stopped (page visible)';
     }
 
-    // Visibility change
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         stopPinging();
@@ -156,12 +152,11 @@
       }
     });
 
-    // Add URL
     addUrlForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const newUrl = urlInput.value.trim();
       if (newUrl && !urls.some(item => item.url === newUrl)) {
-        urls.push({ url: newUrl, status: 'Pending', lastPing: null });
+        urls.push({ url: newUrl, status: 'Pending', lastPing: null, responseTime: null });
         saveUrls();
         renderTable();
         urlInput.value = '';
@@ -169,7 +164,6 @@
       }
     });
 
-    // Edit/Remove
     tableBody.addEventListener('click', (e) => {
       const index = e.target.dataset.index;
       if (e.target.classList.contains('remove-btn')) {
@@ -181,6 +175,8 @@
         const newUrl = prompt('Edit URL:', urls[index].url);
         if (newUrl) {
           urls[index].url = newUrl;
+          urls[index].status = 'Pending';
+          urls[index].responseTime = null;
           saveUrls();
           renderTable();
           logMessage(`Edited URL to: ${newUrl}`);
@@ -188,7 +184,6 @@
       }
     });
 
-    // Save Settings
     saveSettingsBtn.addEventListener('click', () => {
       pingInterval = parseInt(pingIntervalInput.value) || 5;
       localStorage.setItem('pingInterval', pingInterval);
@@ -196,7 +191,6 @@
       logMessage(`Ping interval updated to ${pingInterval} minutes`);
     });
 
-    // Clear All
     clearAllBtn.addEventListener('click', () => {
       if (confirm('Clear all URLs?')) {
         urls = [];
@@ -206,11 +200,10 @@
       }
     });
 
-    // Initial render and start if hidden
     renderTable();
     if (document.visibilityState !== 'visible') {
       startPinging();
     }
   </script>
 </body>
-  </html>
+</html>
