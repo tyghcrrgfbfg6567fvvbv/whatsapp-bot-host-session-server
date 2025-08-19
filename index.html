@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto Render URL</title>
+</head>
+<body>
+  
+  <iframe id="renderFrame" style="display:none;"></iframe>
+
+  <script>
+    function fetchAndRenderUrl() {
+      fetch('url.txt')
+        .then(response => response.text())
+        .then(url => {
+          const frame = document.getElementById('renderFrame');
+          frame.src = url.trim();
+        })
+        .catch(error => console.error('Error fetching URL:', error));
+    }
+
+    // Run immediately and every 5 minutes
+    fetchAndRenderUrl();
+    setInterval(fetchAndRenderUrl, 300000);
+
+    // Stop rendering when page is visible
+    document.addEventListener('visibilitychange', () => {
+      const frame = document.getElementById('renderFrame');
+      if (document.visibilityState === 'visible') {
+        frame.src = '';
+      } else {
+        fetchAndRenderUrl();
+      }
+    });
+  </script>
+</body>
+</html>
