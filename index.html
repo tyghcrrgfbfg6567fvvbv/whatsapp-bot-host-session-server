@@ -3,36 +3,214 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Auto Render URL</title>
+  <title>URL Ping Monitor - Keep Your Sites Awake</title>
+  <!-- Bootstrap CSS for professional styling -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <style>
+    body { padding: 20px; background-color: #f8f9fa; }
+    .status-up { color: green; font-weight: bold; }
+    .status-down { color: red; font-weight: bold; }
+    .status-pending { color: orange; font-weight: bold; }
+    .log-area { max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff; }
+  </style>
 </head>
 <body>
-  
-  <iframe id="renderFrame" style="display:none;"></iframe>
+  <div class="container">
+    <header class="text-center mb-5">
+      <h1 class="display-4">URL Ping Monitor</h1>
+      <p class="lead">Professional tool to ping multiple URLs (e.g., Render sites) in the background, keeping them awake. Add URLs, monitor status (up/down), and view logs. Pinging runs every 5 minutes when the page is hidden/minimized.</p>
+    </header>
+
+    <!-- Add URL Form -->
+    <section class="mb-4">
+      <form id="addUrlForm">
+        <div class="input-group">
+          <input type="url" class="form-control" id="urlInput" placeholder="Enter URL (e.g., https://your-site.onrender.com)" required>
+          <button class="btn btn-primary" type="submit">Add URL</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- URL List Table -->
+    <section>
+      <h2>Monitored URLs</h2>
+      <table class="table table-striped table-hover" id="urlTable">
+        <thead>
+          <tr>
+            <th>URL</th>
+            <th>Status</th>
+            <th>Last Ping</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Global Status and Logs -->
+    <section class="mt-4">
+      <h2>Global Status</h2>
+      <p id="globalStatus">Status: Idle</p>
+      <h3>Logs</h3>
+      <div id="logArea" class="log-area"></div>
+    </section>
+
+    <!-- Settings -->
+    <section class="mt-4">
+      <h2>Settings</h2>
+      <div class="form-group">
+        <label for="pingInterval">Ping Interval (minutes):</label>
+        <input type="number" id="pingInterval" class="form-control w-25" value="5" min="1">
+        <button class="btn btn-secondary mt-2" id="saveSettings">Save</button>
+      </div>
+      <button class="btn btn-danger mt-2" id="clearAll">Clear All URLs</button>
+    </section>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 
   <script>
-    function fetchAndRenderUrl() {
-      fetch('url.txt')
-        .then(response => response.text())
-        .then(url => {
-          const frame = document.getElementById('renderFrame');
-          frame.src = url.trim();
-        })
-        .catch(error => console.error('Error fetching URL:', error));
+    let urls = JSON.parse(localStorage.getItem('pingUrls')) || [];
+    let pingInterval = parseInt(localStorage.getItem('pingInterval')) || 5; // Default 5 minutes
+    let intervalId = null;
+    const tableBody = document.querySelector('#urlTable tbody');
+    const globalStatus = document.getElementById('globalStatus');
+    const logArea = document.getElementById('logArea');
+    const urlInput = document.getElementById('urlInput');
+    const addUrlForm = document.getElementById('addUrlForm');
+    const pingIntervalInput = document.getElementById('pingInterval');
+    const saveSettingsBtn = document.getElementById('saveSettings');
+    const clearAllBtn = document.getElementById('clearAll');
+
+    pingIntervalInput.value = pingInterval;
+
+    function logMessage(message) {
+      const logEntry = document.createElement('p');
+      logEntry.textContent = `[${new Date().toLocaleString()}] ${message}`;
+      logArea.appendChild(logEntry);
+      logArea.scrollTop = logArea.scrollHeight;
     }
 
-    // Run immediately and every 5 minutes
-    fetchAndRenderUrl();
-    setInterval(fetchAndRenderUrl, 300000);
+    function saveUrls() {
+      localStorage.setItem('pingUrls', JSON.stringify(urls));
+    }
 
-    // Stop rendering when page is visible
+    function renderTable() {
+      tableBody.innerHTML = '';
+      urls.forEach((item, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${item.url}</td>
+          <td class="${item.status === 'Up' ? 'status-up' : item.status === 'Down' ? 'status-down' : 'status-pending'}">${item.status || 'Pending'}</td>
+          <td>${item.lastPing ? new Date(item.lastPing).toLocaleString() : 'N/A'}</td>
+          <td>
+            <button class="btn btn-sm btn-warning edit-btn" data-index="${index}">Edit</button>
+            <button class="btn btn-sm btn-danger remove-btn" data-index="${index}">Remove</button>
+          </td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+
+    function pingAll() {
+      globalStatus.textContent = 'Status: Pinging...';
+      urls.forEach((item, index) => {
+        fetch(item.url, { mode: 'no-cors' })
+          .then(() => {
+            urls[index].status = 'Up';
+            urls[index].lastPing = Date.now();
+            logMessage(`Ping successful for ${item.url}`);
+          })
+          .catch(() => {
+            urls[index].status = 'Down';
+            urls[index].lastPing = Date.now();
+            logMessage(`Ping failed for ${item.url}`);
+          })
+          .finally(() => {
+            saveUrls();
+            renderTable();
+          });
+      });
+      globalStatus.textContent = 'Status: Ping complete';
+    }
+
+    function startPinging() {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(pingAll, pingInterval * 60 * 1000);
+      pingAll(); // Initial ping
+    }
+
+    function stopPinging() {
+      if (intervalId) clearInterval(intervalId);
+      globalStatus.textContent = 'Status: Pinging stopped (page visible)';
+    }
+
+    // Visibility change
     document.addEventListener('visibilitychange', () => {
-      const frame = document.getElementById('renderFrame');
       if (document.visibilityState === 'visible') {
-        frame.src = '';
+        stopPinging();
       } else {
-        fetchAndRenderUrl();
+        startPinging();
+        globalStatus.textContent = 'Status: Pinging resumed (page hidden)';
       }
     });
+
+    // Add URL
+    addUrlForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const newUrl = urlInput.value.trim();
+      if (newUrl && !urls.some(item => item.url === newUrl)) {
+        urls.push({ url: newUrl, status: 'Pending', lastPing: null });
+        saveUrls();
+        renderTable();
+        urlInput.value = '';
+        logMessage(`Added URL: ${newUrl}`);
+      }
+    });
+
+    // Edit/Remove
+    tableBody.addEventListener('click', (e) => {
+      const index = e.target.dataset.index;
+      if (e.target.classList.contains('remove-btn')) {
+        urls.splice(index, 1);
+        saveUrls();
+        renderTable();
+        logMessage(`Removed URL at index ${index}`);
+      } else if (e.target.classList.contains('edit-btn')) {
+        const newUrl = prompt('Edit URL:', urls[index].url);
+        if (newUrl) {
+          urls[index].url = newUrl;
+          saveUrls();
+          renderTable();
+          logMessage(`Edited URL to: ${newUrl}`);
+        }
+      }
+    });
+
+    // Save Settings
+    saveSettingsBtn.addEventListener('click', () => {
+      pingInterval = parseInt(pingIntervalInput.value) || 5;
+      localStorage.setItem('pingInterval', pingInterval);
+      startPinging();
+      logMessage(`Ping interval updated to ${pingInterval} minutes`);
+    });
+
+    // Clear All
+    clearAllBtn.addEventListener('click', () => {
+      if (confirm('Clear all URLs?')) {
+        urls = [];
+        saveUrls();
+        renderTable();
+        logMessage('Cleared all URLs');
+      }
+    });
+
+    // Initial render and start if hidden
+    renderTable();
+    if (document.visibilityState !== 'visible') {
+      startPinging();
+    }
   </script>
 </body>
-</html>
+  </html>
